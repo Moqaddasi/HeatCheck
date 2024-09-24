@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistent Pointer Heatmap Tracker</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        #heatmap {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        #controls label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        #controls input,
+        #controls button {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="heatmap"></canvas>
+    <div id="controls">
+        <label for="intensity">Intensity: <span id="intensityValue">50</span></label>
+        <input type="range" id="intensity" min="1" max="100" value="50">
+        <label for="radius">Radius: <span id="radiusValue">30</span></label>
+        <input type="range" id="radius" min="5" max="100" value="30">
+        <button id="clear">Clear Heatmap</button>
+        <button id="save">Save as Image</button>
+        <div>Total Tracked Points: <span id="pointCount">0</span></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('heatmap');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+        let heatmapData;
+        let pointCount = 0;
+
+        // Control elements
+        const intensitySlider = document.getElementById('intensity');
+        const radiusSlider = document.getElementById('radius');
+        const clearButton = document.getElementById('clear');
+        const saveButton = document.getElementById('save');
+        const pointCountDisplay = document.getElementById('pointCount');
+
+        function resizeCanvas() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            heatmapData = new Float32Array(width * height);
+            redrawHeatmap();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function updateHeatmap(x, y) {
+            const radius = parseInt(radiusSlider.value);
+            const intensity = parseInt(intensitySlider.value) / 500; // Reduced intensity for longer-term tracking
+
+            for (let i = -radius; i < radius; i++) {
+                for (let j = -radius; j < radius; j++) {
+                    const distance = Math.sqrt(i * i + j * j);
+                    if (distance < radius) {
+                        const pixelX = Math.floor(x + i);
+                        const pixelY = Math.floor(y + j);
+                        if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < height) {
+                            const index = pixelY * width + pixelX;
+                            const factor = 1 - distance / radius;
+                            heatmapData[index] += intensity * factor;
+                            heatmapData[index] = Math.min(heatmapData[index], 1); // Cap at 1
+                        }
+                    }
+                }
+            }
+            pointCount++;
+            pointCountDisplay.textContent = pointCount;
+            redrawHeatmap();
+        }
+
+        function getColor(value) {
+            const hue = ((1 - value) * 240).toString(10);
+            return ["hsla(", hue, ",100%,50%,", value, ")"].join("");
+        }
+
+        function redrawHeatmap() {
+            const imageData = ctx.createImageData(width, height);
+            for (let i = 0; i < heatmapData.length; i++) {
+                const value = heatmapData[i];
+                const color = getColor(value);
+                const rgba = color.match(/\d+/g).map(Number);
+                const index = i * 4;
+                imageData.data[index] = rgba[0];
+                imageData.data[index + 1] = rgba[1];
+                imageData.data[index + 2] = rgba[2];
+                imageData.data[index + 3] = rgba[3] * 255;
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        document.addEventListener('mousemove', (event) => {
+            updateHeatmap(event.clientX, event.clientY);
+        });
+
+        // Update displayed values
+        intensitySlider.addEventListener('input', () => {
+            document.getElementById('intensityValue').textContent = intensitySlider.value;
+        });
+
+        radiusSlider.addEventListener('input', () => {
+            document.getElementById('radiusValue').textContent = radiusSlider.value;
+        });
+
+        clearButton.addEventListener('click', () => {
+            heatmapData.fill(0);
+            pointCount = 0;
+            pointCountDisplay.textContent = pointCount;
+            redrawHeatmap();
+        });
+
+        saveButton.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'heatmap.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+    </script>
+</body>
+
+</html>
